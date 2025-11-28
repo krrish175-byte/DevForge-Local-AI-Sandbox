@@ -1,0 +1,2 @@
+def buggy()
+    print("Hello")
