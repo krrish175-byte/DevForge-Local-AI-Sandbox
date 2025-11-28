@@ -1,12 +1,112 @@
-autopatch_env/
-venv/
-.env/
-*.pyc
+# ----------------------------------------
+# PYTHON
+# ----------------------------------------
 __pycache__/
-*/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.dll
+
+# Byte-compiled / optimized / DLL files
+*.pyc
+*/*/__pycache__/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Logs
+*.log
+
+# ----------------------------------------
+# VIRTUAL ENVIRONMENTS
+# ----------------------------------------
+venv/
+env/
+.autopatch_env/
+.autopatch_env*/
+autopatch_env/
+.autopatch-env/
+python_env/
+.env/
+.venv/
+
+# ----------------------------------------
+# STREAMLIT
+# ----------------------------------------
+.streamlit/
+.credentials/
+local_credentials.json
+
+# ----------------------------------------
+# JUPYTER / NOTEBOOKS
 .ipynb_checkpoints/
-*.pth
+
+# ----------------------------------------
+# MODEL / TORCH / HF LARGE FILES
+# ----------------------------------------
 *.bin
 *.pt
+*.pth
+*.ckpt
+*.safetensors
+*.tflite
+*.h5
+*.onnx
+
+# HuggingFace Cache
+~/.cache/huggingface/
+huggingface_cache/
+hf_cache/
+.cache/
+
+# Torch compiled kernels (VERY BIG)
 *.dylib
-model_cache/
+*.so
+*.a
+torch/**/*
+!torch/*.py
+
+# ----------------------------------------
+# SYSTEM FILES
+# ----------------------------------------
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# ----------------------------------------
+# IDEs
+# ----------------------------------------
+# VSCode
+.vscode/
+.history/
+
+# PyCharm
+.idea/
+
+# ----------------------------------------
+# APPLICATION GENERATED FILES
+# ----------------------------------------
+sandbox_temp/
+tmp/
+temp/
+outputs/
+patch_logs/
+execution_traces/
+runtime_outputs/
+
+# ----------------------------------------
+# GIT / LFS
+# ----------------------------------------
+*.orig
+*.cache
+*.bak
+*.backup
+
+# Prevent accidentally committing model folders
+models/
+model_weights/
