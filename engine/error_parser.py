@@ -1,31 +1,47 @@
-import traceback
+# engine/error_parser.py
+
 from typing import Dict, Optional
+import re
 
 def parse_traceback(stderr: str, code: str) -> Optional[Dict]:
     """
-    Extracts:
-    - error_type
-    - line number
-    - code line
+    Extract:
+      - error_type
+      - message
+      - line number
+      - code line
+    from a Python traceback.
     """
-
-    if not stderr:
+    if not stderr or "Traceback" not in stderr:
         return None
 
     lines = stderr.strip().split("\n")
-    error_type = lines[-1].split(":")[0].strip()
 
-    # Find "line X"
+    # Last line is usually: "<ErrorType>: message"
+    last = lines[-1]
+    if ":" in last:
+        error_type = last.split(":", 1)[0].strip()
+        message = last.split(":", 1)[1].strip()
+    else:
+        error_type = last.strip()
+        message = ""
+
+    # Find last "File ... line X" entry
     line_num = None
-    for line in lines:
-        if "line " in line:
-            try:
-                line_num = int(line.split("line")[1].split(",")[0])
-            except:
-                pass
+    for line in reversed(lines):
+        if "File " in line and "line " in line:
+            m = re.search(r"line\s+(\d+)", line)
+            if m:
+                line_num = int(m.group(1))
+                break
 
     if line_num is None:
-        return None
+        return {
+            "error_type": error_type,
+            "message": message,
+            "line": None,
+            "code_line": None,
+        }
 
     code_lines = code.split("\n")
     if 1 <= line_num <= len(code_lines):
@@ -35,6 +51,7 @@ def parse_traceback(stderr: str, code: str) -> Optional[Dict]:
 
     return {
         "error_type": error_type,
+        "message": message,
         "line": line_num,
-        "code_line": code_line
+        "code_line": code_line,
     }

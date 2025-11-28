@@ -1,76 +1,109 @@
-import torch
-from typing import Optional, Dict
+# engine/llm_patch.py
 
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+from __future__ import annotations
 
-MODEL_NAME = "Salesforce/codet5-small"
-_tokenizer = None
-_model = None
-_device = None
+from typing import Dict, Optional
+import os
+import ast
 
+try:
+    from llama_cpp import Llama
+except ImportError:
+    Llama = None  # will handle gracefully
 
-def _load_model() -> bool:
-    global _tokenizer, _model, _device
+_LLM: Optional[Llama] = None
 
-    if _tokenizer is not None and _model is not None:
-        return True
-
-    try:
-        _device = torch.device("cpu")
-        _tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-        _model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME)
-        _model.to(_device)
-        return True
-    except Exception as e:
-        print("LLM model load failed:", e)
-        return False
+DEFAULT_MODEL_PATH = "models/deepseek-coder-1.3b-instruct.Q4_K_M.gguf"
 
 
-def ai_suggest_patch(code: str, error: Dict) -> Optional[str]:
+def _get_llm() -> Optional[Llama]:
     """
-    Uses CodeT5-small offline to fix Python code.
-    Returns patched code OR None.
+    Lazy-load the local GGUF model. Returns None if unavailable.
     """
-    if not _load_model():
+    global _LLM
+    if _LLM is not None:
+        return _LLM
+
+    if Llama is None:
+        print("[LLM] llama_cpp not installed; skipping LLM.")
         return None
 
-    # SAFE PROMPT (no backticks, no triple quotes inside)
-    prompt = (
-        "You are an AI that fixes Python code.\n"
-        "Given the code and the error details, return ONLY the fixed Python code.\n"
-        "Do not provide explanations.\n\n"
-        "CODE:\n"
-        f"{code}\n\n"
-        "ERROR TYPE:\n"
-        f"{error.get('error_type','')}\n\n"
-        "ERROR MESSAGE:\n"
-        f"{error.get('message','')}\n\n"
-        "ERROR LINE:\n"
-        f"{error.get('line','')}\n\n"
-        "PROBLEMATIC LINE:\n"
-        f"{error.get('code_line','')}\n\n"
-        "Return only the corrected code below:\n"
-    )
+    model_path = os.getenv("AUTOPATCH_LLM_PATH", DEFAULT_MODEL_PATH)
+    if not os.path.exists(model_path):
+        print(f"[LLM] Model file not found: {model_path}")
+        return None
 
     try:
-        inputs = _tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512)
-        inputs = {k: v.to(_device) for k, v in inputs.items()}
-
-        output_ids = _model.generate(
-            **inputs,
-            max_length=256,
-            num_beams=4,
-            early_stopping=True,
+        print(f"[LLM] Loading model from {model_path} ...")
+        _LLM = Llama(
+            model_path=model_path,
+            n_ctx=4096,
+            n_threads=4,  # adjust based on CPU cores
         )
-
-        result = _tokenizer.decode(output_ids[0], skip_special_tokens=True)
-
-        # Sometimes LLM returns explanations → keep from first "def " if present
-        if "def " in result:
-            result = result[result.index("def ") :]
-
-        result = result.strip()
-        return result if result else None
+        print("[LLM] Model loaded.")
+        return _LLM
     except Exception as e:
-        print("LLM inference failed:", e)
+        print(f"[LLM] Failed to load model: {e}")
+        return None
+
+
+def ai_suggest_patch(code: str, err: Dict) -> Optional[str]:
+    """
+    Use local LLM to generate a FULL fixed version of the script.
+    Returns None if LLM is unavailable or output invalid.
+    """
+    llm = _get_llm()
+    if llm is None:
+        return None
+
+    error_type = err.get("error_type", "UnknownError")
+    line = err.get("line")
+    code_line = (err.get("code_line") or "").strip()
+
+    prompt = f"""
+You are an expert Python debugging assistant.
+
+You are given a Python script and an error that occurred when running it.
+
+Your job:
+- Fix the bug.
+- Return ONLY the corrected full Python script.
+- Do NOT add explanations or comments.
+- Do NOT wrap code in backticks.
+
+Error:
+- Type: {error_type}
+- Line: {line}
+- Code: {code_line}
+
+### Broken script:
+{code}
+
+### Fixed script (only code):
+"""
+
+    try:
+        result = llm(
+            prompt,
+            max_tokens=512,
+            temperature=0.1,
+            stop=["### Broken script:", "### Fixed script"],
+        )
+        text = result["choices"][0]["text"].strip()
+
+        if not text:
+            print("[LLM] Empty output, ignoring.")
+            return None
+
+        # Validate Python syntax
+        try:
+            ast.parse(text)
+        except SyntaxError:
+            print("[LLM] Generated invalid Python, ignoring.")
+            return None
+
+        return text
+
+    except Exception as e:
+        print(f"[LLM] Generation error: {e}")
         return None

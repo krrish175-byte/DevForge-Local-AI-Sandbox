@@ -1,33 +1,26 @@
+# engine/sandbox_runner.py
+
 import subprocess
 import tempfile
-import sys
-from typing import Tuple
 
-def run_code(code: str) -> Tuple[bool, str, str]:
+def run_code(code: str):
     """
-    Runs code in a sandboxed subprocess with time/memory limits.
+    Run code in an isolated subprocess using a temp file.
     Returns: (success, stdout, stderr)
     """
-
     with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as tmp:
         tmp.write(code)
         tmp_path = tmp.name
 
     try:
-        proc = subprocess.Popen(
-            [sys.executable, tmp_path],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
+        proc = subprocess.run(
+            ["python3", tmp_path],
+            capture_output=True,
+            text=True,
+            timeout=3,
         )
-        stdout, stderr = proc.communicate(timeout=2)
-
-        success = proc.returncode == 0
-        return success, stdout, stderr
-
+        return proc.returncode == 0, proc.stdout, proc.stderr
     except subprocess.TimeoutExpired:
-        proc.kill()
-        return False, "", "TimeoutExpired: Execution exceeded time limit"
-
+        return False, "", "TimeoutExpired: execution took too long\n"
     except Exception as e:
-        return False, "", str(e)
+        return False, "", f"Sandbox error: {e}\n"

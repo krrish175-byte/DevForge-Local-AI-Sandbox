@@ -1,58 +1,67 @@
+# ui/app.py
+
 import sys
 from pathlib import Path
-
-ROOT_DIR = Path(__file__).resolve().parents[1]
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
-
 import streamlit as st
-from engine.repair_loop import repair_code
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from engine.repair_loop import repair_code  # noqa: E402
 
 st.set_page_config(page_title="AutoPatch", layout="wide")
 
-st.title("AutoPatch – Local Autonomous Debugging System")
-st.write("Upload code or paste manually, then click **Run AutoPatch**.")
+st.title("AutoPatch 🔧 Local Autonomous Debugger")
+st.write(
+    "Paste or upload Python code. AutoPatch will run it in a sandbox, "
+    "observe errors, apply rule-based fixes, and optionally try an offline LLM "
+    "(DeepSeek Coder 1.3B) for harder bugs."
+)
 
-file = st.file_uploader("Upload .py file", type=["py"])
+file = st.file_uploader("Upload a .py file", type=["py"])
 
-default_code = """def buggy():
-    arr = [1, 2, 3]
-    for i in range(len(arr) + 1):
-        print(arr[i])
+default_code = """def buggy(n):
+    return buggy(n - 1)
 
-buggy()
+print(buggy(3))
 """
 
 if file:
     code_input = file.read().decode("utf-8")
 else:
-    code_input = st.text_area("Paste your Python code:", default_code, height=280)
+    code_input = st.text_area("Paste your Python code:", default_code, height=260)
 
-iterations = st.slider("Max repair iterations", 1, 10, 5)
+col1, col2, col3 = st.columns([2, 2, 1])
+with col1:
+    iterations = st.slider("Max repair iterations", 1, 10, 3)
+with col2:
+    use_ai = st.checkbox("Use AI (DeepSeek, offline)", value=True)
+with col3:
+    run = st.button("Run AutoPatch")
 
-if st.button("Run AutoPatch"):
-    st.subheader("Running AutoPatch...")
+if run:
+    st.info("Running in sandbox...")
+    final_code, trace = repair_code(
+        code_input,
+        max_iterations=iterations,
+        use_ai=use_ai,
+    )
 
-    with st.spinner("Executing in sandbox, analyzing errors, generating patches..."):
-        final_code, trace = repair_code(code_input, max_iterations=iterations)
-
-    st.success("Done.")
-
-    st.header("Repair Trace")
+    st.subheader("Repair Trace")
     for step in trace:
-        with st.expander(f"Iteration {step['iteration']}: {step['message']}"):
-            st.write("**Success:**", step["success"])
-            st.write("**Patch source:**", step["patch_source"])
-            st.write("**Rule:**", step["rule"])
-            st.write("**Patched:**", step["patched"])
-            st.write("**Error object:**", step["error"])
-            st.write("**Stdout:**")
-            st.code(step.get("stdout") or "")
-            st.write("**Stderr:**")
-            st.code(step.get("stderr") or "")
+        title = f"Iteration {step.get('iteration')} – {step.get('message')}"
+        with st.expander(title, expanded=True):
+            st.write(
+                f"Success: {step.get('success')} | "
+                f"Patched: {step.get('patched')} | "
+                f"Source: {step.get('source')} | "
+                f"Rule/Model: {step.get('rule')}"
+            )
+            if step.get("stderr"):
+                st.code(step["stderr"], language="text")
             if step.get("diff"):
-                st.write("**Patch diff:**")
                 st.code(step["diff"], language="diff")
 
-    st.header("Final Repaired Code")
+    st.subheader("Final Repaired Code")
     st.code(final_code, language="python")
