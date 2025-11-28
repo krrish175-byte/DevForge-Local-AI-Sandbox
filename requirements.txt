@@ -1,3 +1,4 @@
-streamlit
+streamlit>=1.32
 transformers
 torch
+llama-cpp-python

@@ -94,7 +94,6 @@ if run_button:
         st.success("AutoPatch finished debugging!")
 
         # Confetti animation on success
-        st.balloons()
 
         st.markdown("## Final Repaired Code")
         st.code(final_code, language="python")

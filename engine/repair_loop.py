@@ -47,6 +47,25 @@ def repair_code(
     for i in range(1, max_iterations + 1):
         success, stdout, stderr = run_code(code)
 
+        # --- NEW: Detect logic errors using stdout ---
+        logic_patch, logic_rule = apply_rules(code, {"stdout": stdout, "stderr": stderr})
+        if logic_patch and logic_patch.strip() != code.strip():
+            if _is_valid_python(logic_patch):
+                logic_step = {
+                    "iteration": i,
+                    "success": False,
+                    "stdout": stdout,
+                    "stderr": stderr,
+                    "patched": True,
+                    "source": "rule",
+                    "rule": logic_rule,
+                    "message": f"Logic error detected and patched via {logic_rule}",
+                    "diff": _diff(code, logic_patch, f"logic:{logic_rule}"),
+                }
+                trace.append(logic_step)
+                code = logic_patch
+                continue
+
         step: Dict = {
             "iteration": i,
             "success": success,
